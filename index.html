@@ -2,48 +2,63 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Survey App | גירסה עם מחיקת נתונים</title>
+    <title>Survey App | אימות טלפוני ומחיקה</title>
     <style>
-        :root { --primary: #6366f1; --bg: #f8fafc; --danger: #ef4444; }
+        :root { --primary: #6366f1; --bg: #f8fafc; --danger: #ef4444; --success: #10b981; }
         body { font-family: sans-serif; background: var(--bg); direction: rtl; padding: 20px; }
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); max-width: 400px; margin: auto; }
         .btn { width: 100%; padding: 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; background: var(--primary); color: white; margin-top: 10px; }
-        .btn-danger { background: var(--danger); margin-top: 20px; font-size: 0.9rem; }
+        .btn-danger { background: var(--danger); margin-top: 20px; }
+        input { width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd; box-sizing: border-box; }
         #ban-screen { display:none; position:fixed; inset:0; background:white; z-index:10000; text-align:center; padding-top:100px; }
         .survey-card { background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #eee; }
-        .opt-btn { width: 100%; text-align: right; padding: 12px; margin: 5px 0; border: 1px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: #fff; transition: 0.3s; }
-        .opt-btn.selected { background: #6366f1 !important; color: white; font-weight: bold; }
-        .nav-bar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .opt-btn { width: 100%; text-align: right; padding: 12px; margin: 5px 0; border: 1px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: #fff; }
+        .opt-btn.selected { background: #6366f1 !important; color: white; }
+        .nav-bar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px 20px; border-radius: 12px; margin-bottom: 20px; }
+        #recaptcha-container { margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div id="ban-screen">
         <h1 style="color:red">חסום מהמערכת 🚫</h1>
-        <div id="ban-details" style="margin-top: 20px;"></div>
+        <div id="ban-details"></div>
     </div>
 
     <div id="auth-ui" class="card">
-        <h2>כניסה לסקרים</h2>
-        <input type="email" id="email" placeholder="אימייל" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd; box-sizing: border-box;">
-        <input type="password" id="pass" placeholder="סיסמה" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd; box-sizing: border-box;">
+        <h2>כניסה למערכת</h2>
+        
+        <input type="email" id="email" placeholder="אימייל">
+        <input type="password" id="pass" placeholder="סיסמה">
         <button class="btn" id="loginBtn">כניסה / הרשמה</button>
+        
+        <hr>
+        
+        <input type="tel" id="phone" placeholder="מספר טלפון (למשל 972501234567+)">
+        <div id="recaptcha-container"></div>
+        <button class="btn" style="background:#2ecc71" id="sendCodeBtn">שלח קוד אימות ב-SMS</button>
+        
+        <div id="verification-ui" style="display:none; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+            <input type="text" id="verificationCode" placeholder="הכנס את הקוד שקיבלת">
+            <button class="btn" style="background:#27ae60" id="verifyCodeBtn">אמת קוד וכנס</button>
+        </div>
+
         <button class="btn" style="background:#4285F4" id="googleBtn">כניסה עם Google</button>
     </div>
 
     <div id="app-ui" style="display:none; max-width:500px; margin:auto;">
         <div class="nav-bar">
-            <span id="hello" style="font-weight:bold;"></span>
+            <span id="hello"></span>
             <button class="btn" style="width:auto; margin:0; padding:5px 15px; background:#ff4757;" id="logoutBtn">התנתק</button>
         </div>
         <div id="questions-list">טוען שאלות...</div>
         
-        <button class="btn btn-danger" id="deleteDataBtn">מחק את המשתמש שלי וכל הנתונים</button>
+        <button class="btn btn-danger" id="deleteDataBtn">מחק את החשבון וכל הנתונים שלי</button>
     </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, deleteUser, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getFirestore, collection, onSnapshot, doc, setDoc, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = { 
@@ -59,7 +74,13 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    let confirmationResult = null;
     let userVotesMap = {};
+
+    // הגדרת reCAPTCHA
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'normal'
+    });
 
     onAuthStateChanged(auth, user => {
         if(user) {
@@ -67,21 +88,44 @@
                 if(s.exists()) {
                     document.getElementById('ban-screen').style.display = 'block';
                     document.getElementById('app-ui').style.display = 'none';
-                    document.getElementById('ban-details').innerText = `סיבה: ${s.data().reason} | שחרור: ${s.data().until}`;
+                    document.getElementById('ban-details').innerText = `סיבה: ${s.data().reason}`;
                 } else {
                     document.getElementById('auth-ui').style.display = 'none';
                     document.getElementById('app-ui').style.display = 'block';
-                    document.getElementById('hello').innerText = "שלום, " + (user.displayName || user.email);
+                    document.getElementById('hello').innerText = "שלום, " + (user.displayName || user.email || user.phoneNumber);
                     listenToMyVotes(user.uid);
                 }
             });
         } else {
             document.getElementById('auth-ui').style.display = 'block';
             document.getElementById('app-ui').style.display = 'none';
-            document.getElementById('ban-screen').style.display = 'none';
         }
     });
 
+    // פונקציית שליחת קוד לטלפון
+    document.getElementById('sendCodeBtn').onclick = async () => {
+        const phoneNumber = document.getElementById('phone').value;
+        const appVerifier = window.recaptchaVerifier;
+        try {
+            confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+            document.getElementById('verification-ui').style.display = 'block';
+            alert("קוד נשלח לטלפון שלך!");
+        } catch (error) {
+            alert("שגיאה בשליחת SMS: " + error.message);
+        }
+    };
+
+    // אימות הקוד
+    document.getElementById('verifyCodeBtn').onclick = async () => {
+        const code = document.getElementById('verificationCode').value;
+        try {
+            await confirmationResult.confirm(code);
+        } catch (error) {
+            alert("קוד שגוי: " + error.message);
+        }
+    };
+
+    // שאר הפונקציות (מחיקה, טעינה וכו')
     function listenToMyVotes(uid) {
         const qVotes = query(collection(db, "votes"), where("uid", "==", uid));
         onSnapshot(qVotes, (snapshot) => {
@@ -99,12 +143,10 @@
                 const data = d.data();
                 if(!data.isActive) return;
                 const myChoice = userVotesMap[d.id];
-                
                 let buttonsHtml = data.options.map(o => {
                     const isSel = (o === myChoice) ? 'selected' : '';
-                    return `<button class="opt-btn ${isSel}" onclick="window.vote('${d.id}','${o}')">${o} ${isSel ? '✓' : ''}</button>`;
+                    return `<button class="opt-btn ${isSel}" onclick="window.vote('${d.id}','${o}')">${o}</button>`;
                 }).join('');
-
                 list.innerHTML += `<div class="survey-card"><b>${data.text}</b><br>${buttonsHtml}</div>`;
             });
         });
@@ -114,33 +156,22 @@
         const voteId = auth.currentUser.uid + "_" + qid;
         await setDoc(doc(db, "votes", voteId), {
             uid: auth.currentUser.uid,
-            name: auth.currentUser.displayName || auth.currentUser.email,
+            name: auth.currentUser.displayName || auth.currentUser.email || auth.currentUser.phoneNumber,
             questionId: qid,
             vote: val,
             lastUpdated: Date.now()
         });
     };
 
-    // פונקציה למחיקת כל נתוני המשתמש מהדאטהבייס ומחיקת החשבון
     document.getElementById('deleteDataBtn').onclick = async () => {
-        if (!confirm("האם אתה בטוח שברצונך למחוק את כל נתוני ההצבעה שלך ואת החשבון? פעולה זו אינה ניתנת לביטול.")) return;
-        
+        if (!confirm("האם למחוק את כל הנתונים והחשבון?")) return;
         const user = auth.currentUser;
-        const uid = user.uid;
-
-        try {
-            // 1. מחיקת כל ההצבעות מהקולקשן votes
-            const q = query(collection(db, "votes"), where("uid", "==", uid));
-            const querySnapshot = await getDocs(q);
-            const deletePromises = querySnapshot.docs.map(d => deleteDoc(doc(db, "votes", d.id)));
-            await Promise.all(deletePromises);
-
-            // 2. מחיקת חשבון המשתמש מ-Authentication
-            await deleteUser(user);
-            alert("החשבון וכל הנתונים נמחקו בהצלחה.");
-        } catch (err) {
-            alert("שגיאה במחיקה: " + err.message + "\nייתכן שעליך להתנתק ולהתחבר מחדש כדי לבצע פעולה זו.");
-        }
+        const q = query(collection(db, "votes"), where("uid", "==", user.uid));
+        const snap = await getDocs(q);
+        const del = snap.docs.map(d => deleteDoc(doc(db, "votes", d.id)));
+        await Promise.all(del);
+        await deleteUser(user);
+        alert("נמחק בהצלחה");
     };
 
     document.getElementById('googleBtn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
@@ -148,7 +179,7 @@
     document.getElementById('loginBtn').onclick = async () => {
         const e = document.getElementById('email').value, p = document.getElementById('pass').value;
         try { await signInWithEmailAndPassword(auth, e, p); } 
-        catch { try { await createUserWithEmailAndPassword(auth, e, p); } catch(err) { alert("שגיאה: " + err.message); } }
+        catch { await createUserWithEmailAndPassword(auth, e, p); }
     };
 
 </script>
