@@ -2,28 +2,18 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Survey App | בחירה גמישה</title>
+    <title>Survey App | גירסה עם מחיקת נתונים</title>
     <style>
-        :root { --primary: #6366f1; --bg: #f8fafc; }
+        :root { --primary: #6366f1; --bg: #f8fafc; --danger: #ef4444; }
         body { font-family: sans-serif; background: var(--bg); direction: rtl; padding: 20px; }
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); max-width: 400px; margin: auto; }
         .btn { width: 100%; padding: 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; background: var(--primary); color: white; margin-top: 10px; }
+        .btn-danger { background: var(--danger); margin-top: 20px; font-size: 0.9rem; }
         #ban-screen { display:none; position:fixed; inset:0; background:white; z-index:10000; text-align:center; padding-top:100px; }
         .survey-card { background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #eee; }
-        
-        /* עיצוב כפתורי הצבעה */
-        .opt-btn { width: 100%; text-align: right; padding: 12px; margin: 5px 0; border: 1px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: #fff; transition: 0.3s; font-size: 1rem; }
-        .opt-btn:hover { background: #f1f5f9; }
-        
-        /* עיצוב התשובה שנבחרה */
-        .opt-btn.selected { 
-            background: #6366f1 !important; 
-            color: white; 
-            border-color: #4f46e5;
-            font-weight: bold;
-            box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
-        }
-        .voted-status { font-size: 0.8rem; color: #10b981; margin-top: 5px; display: block; }
+        .opt-btn { width: 100%; text-align: right; padding: 12px; margin: 5px 0; border: 1px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: #fff; transition: 0.3s; }
+        .opt-btn.selected { background: #6366f1 !important; color: white; font-weight: bold; }
+        .nav-bar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
@@ -35,24 +25,26 @@
 
     <div id="auth-ui" class="card">
         <h2>כניסה לסקרים</h2>
-        <input type="email" id="email" placeholder="אימייל" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd;">
-        <input type="password" id="pass" placeholder="סיסמה" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd;">
-        <button class="btn" onclick="handleAuth()">כניסה / הרשמה</button>
-        <button class="btn" style="background:#4285F4" onclick="loginWithGoogle()">כניסה עם Google</button>
+        <input type="email" id="email" placeholder="אימייל" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd; box-sizing: border-box;">
+        <input type="password" id="pass" placeholder="סיסמה" style="width:100%; padding:10px; margin:5px 0; border-radius:8px; border:1px solid #ddd; box-sizing: border-box;">
+        <button class="btn" id="loginBtn">כניסה / הרשמה</button>
+        <button class="btn" style="background:#4285F4" id="googleBtn">כניסה עם Google</button>
     </div>
 
     <div id="app-ui" style="display:none; max-width:500px; margin:auto;">
-        <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; padding:15px;">
+        <div class="nav-bar">
             <span id="hello" style="font-weight:bold;"></span>
-            <button onclick="auth.signOut()" style="background:none; border:1px solid #ddd; padding:5px 10px; border-radius:5px; cursor:pointer;">יציאה</button>
+            <button class="btn" style="width:auto; margin:0; padding:5px 15px; background:#ff4757;" id="logoutBtn">התנתק</button>
         </div>
         <div id="questions-list">טוען שאלות...</div>
+        
+        <button class="btn btn-danger" id="deleteDataBtn">מחק את המשתמש שלי וכל הנתונים</button>
     </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-    import { getFirestore, collection, onSnapshot, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, collection, onSnapshot, doc, setDoc, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = { 
         apiKey: "AIzaSyDe865bQUEQ_jbNeiXxCK4CfGM7n5Tx9-w", 
@@ -67,11 +59,10 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    let userVotesMap = {}; // מפה ששומרת: מזהה שאלה -> מה המשתמש ענה
+    let userVotesMap = {};
 
     onAuthStateChanged(auth, user => {
         if(user) {
-            // בדיקת באן בזמן אמת
             onSnapshot(doc(db, "bans", user.uid), s => {
                 if(s.exists()) {
                     document.getElementById('ban-screen').style.display = 'block';
@@ -81,24 +72,21 @@
                     document.getElementById('auth-ui').style.display = 'none';
                     document.getElementById('app-ui').style.display = 'block';
                     document.getElementById('hello').innerText = "שלום, " + (user.displayName || user.email);
-                    listenToMyVotes();
+                    listenToMyVotes(user.uid);
                 }
             });
         } else {
             document.getElementById('auth-ui').style.display = 'block';
             document.getElementById('app-ui').style.display = 'none';
+            document.getElementById('ban-screen').style.display = 'none';
         }
     });
 
-    // האזנה להצבעות האישיות שלי כדי לדעת מה סימנתי
-    function listenToMyVotes() {
-        const qVotes = query(collection(db, "votes"), where("uid", "==", auth.currentUser.uid));
+    function listenToMyVotes(uid) {
+        const qVotes = query(collection(db, "votes"), where("uid", "==", uid));
         onSnapshot(qVotes, (snapshot) => {
             userVotesMap = {};
-            snapshot.docs.forEach(d => {
-                const data = d.data();
-                userVotesMap[data.questionId] = data.vote;
-            });
+            snapshot.docs.forEach(d => { userVotesMap[d.data().questionId] = d.data().vote; });
             loadSurveys();
         });
     }
@@ -110,22 +98,14 @@
             s.forEach(d => {
                 const data = d.data();
                 if(!data.isActive) return;
-
-                const myChoice = userVotesMap[d.id]; // הבחירה הנוכחית שלי לשאלה הזו
+                const myChoice = userVotesMap[d.id];
                 
                 let buttonsHtml = data.options.map(o => {
-                    const isSelected = (o === myChoice) ? 'selected' : '';
-                    return `<button class="opt-btn ${isSelected}" onclick="vote('${d.id}','${o}')">
-                                ${o} ${isSelected ? ' ✓' : ''}
-                            </button>`;
+                    const isSel = (o === myChoice) ? 'selected' : '';
+                    return `<button class="opt-btn ${isSel}" onclick="window.vote('${d.id}','${o}')">${o} ${isSel ? '✓' : ''}</button>`;
                 }).join('');
 
-                list.innerHTML += `
-                    <div class="survey-card">
-                        <b style="font-size:1.1rem; display:block; margin-bottom:10px;">${data.text}</b>
-                        ${buttonsHtml}
-                        ${myChoice ? '<span class="voted-status">ניתן לשנות את הבחירה בכל עת</span>' : ''}
-                    </div>`;
+                list.innerHTML += `<div class="survey-card"><b>${data.text}</b><br>${buttonsHtml}</div>`;
             });
         });
     }
@@ -141,13 +121,36 @@
         });
     };
 
-    // פונקציות התחברות
-    window.handleAuth = async () => {
+    // פונקציה למחיקת כל נתוני המשתמש מהדאטהבייס ומחיקת החשבון
+    document.getElementById('deleteDataBtn').onclick = async () => {
+        if (!confirm("האם אתה בטוח שברצונך למחוק את כל נתוני ההצבעה שלך ואת החשבון? פעולה זו אינה ניתנת לביטול.")) return;
+        
+        const user = auth.currentUser;
+        const uid = user.uid;
+
+        try {
+            // 1. מחיקת כל ההצבעות מהקולקשן votes
+            const q = query(collection(db, "votes"), where("uid", "==", uid));
+            const querySnapshot = await getDocs(q);
+            const deletePromises = querySnapshot.docs.map(d => deleteDoc(doc(db, "votes", d.id)));
+            await Promise.all(deletePromises);
+
+            // 2. מחיקת חשבון המשתמש מ-Authentication
+            await deleteUser(user);
+            alert("החשבון וכל הנתונים נמחקו בהצלחה.");
+        } catch (err) {
+            alert("שגיאה במחיקה: " + err.message + "\nייתכן שעליך להתנתק ולהתחבר מחדש כדי לבצע פעולה זו.");
+        }
+    };
+
+    document.getElementById('googleBtn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+    document.getElementById('logoutBtn').onclick = () => signOut(auth);
+    document.getElementById('loginBtn').onclick = async () => {
         const e = document.getElementById('email').value, p = document.getElementById('pass').value;
         try { await signInWithEmailAndPassword(auth, e, p); } 
         catch { try { await createUserWithEmailAndPassword(auth, e, p); } catch(err) { alert("שגיאה: " + err.message); } }
     };
-    window.loginWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
+
 </script>
 </body>
 </html>
