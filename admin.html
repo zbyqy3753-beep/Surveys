@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ממשק ניהול | גרסה 3.0</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; direction: rtl; }
+        .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .category-group { border-right: 4px solid #3b82f6; padding: 10px; margin-bottom: 20px; background: #f8fafc; border-radius: 0 8px 8px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { padding: 12px; border-bottom: 1px solid #edf2f7; text-align: right; }
+        .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; }
+        .btn-red { background: #ef4444; }
+        .btn-blue { background: #3b82f6; }
+        .btn-green { background: #10b981; }
+        .bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; margin-top: 5px; width: 100%; }
+        .bar-fill { background: #3b82f6; height: 100%; border-radius: 5px; }
+        input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 5px; margin: 5px; }
+        .date-tag { font-size: 11px; color: #64748b; }
+    </style>
+</head>
+<body>
+
+    <h1>ניהול מערכת מלא 🛠️</h1>
+
+    <div class="card">
+        <h3>📊 סטטיסטיקה ועריכת נושאים</h3>
+        <div id="statsContainer">טוען...</div>
+    </div>
+
+    <div class="card">
+        <h3>➕ הוספת שאלה חדשה</h3>
+        <input type="text" id="nCategory" placeholder="נושא">
+        <input type="text" id="nq" placeholder="שאלה">
+        <input type="text" id="no" placeholder="תשובות (עם פסיק)">
+        <button class="btn btn-blue" id="addBtn">צור שאלה</button>
+    </div>
+
+    <div class="card">
+        <h3>🚫 ניהול חסומים (Bans)</h3>
+        <table>
+            <thead>
+                <tr><th>שם</th><th>סיבה</th><th>בתוקף עד</th><th>פעולה</th></tr>
+            </thead>
+            <tbody id="bBody"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>🗳️ הצבעות וביצוע באן</h3>
+        <table>
+            <thead>
+                <tr><th>תאריך</th><th>שם</th><th>תשובה</th><th>ביצוע באן</th></tr>
+            </thead>
+            <tbody id="vBody"></tbody>
+        </table>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    const firebaseConfig = { 
+        apiKey: "AIzaSyDe865bQUEQ_jbNeiXxCK4CfGM7n5Tx9-w", 
+        authDomain: "surveyproject-3a831.firebaseapp.com", 
+        projectId: "surveyproject-3a831", 
+        storageBucket: "surveyproject-3a831.firebasestorage.app", 
+        messagingSenderId: "734951066394", 
+        appId: "1:734951066394:web:cb6ea73af396618c663aa3" 
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const formatDate = (ts) => ts ? (ts.toDate ? ts.toDate().toLocaleString('he-IL') : new Date(ts).toLocaleString('he-IL')) : "---";
+
+    let questions = [];
+    let allVotes = [];
+
+    // האזנה לשאלות
+    onSnapshot(collection(db, "question_bank"), s => {
+        questions = s.docs.map(d => ({id: d.id, ...d.data()}));
+        render();
+    });
+
+    // האזנה להצבעות
+    onSnapshot(collection(db, "votes"), s => {
+        allVotes = s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        render();
+    });
+
+    // האזנה לבאנים
+    onSnapshot(collection(db, "bans"), s => {
+        const bBody = document.getElementById('bBody');
+        bBody.innerHTML = '';
+        s.forEach(d => {
+            const b = d.data();
+            bBody.innerHTML += `<tr>
+                <td>${b.name}</td>
+                <td>${b.reason}</td>
+                <td>${b.until}</td>
+                <td><button class="btn btn-green" onclick="removeBan('${d.id}')">שחרר באן</button></td>
+            </tr>`;
+        });
+    });
+
+    function render() {
+        renderStats();
+        renderVotes();
+    }
+
+    function renderStats() {
+        const container = document.getElementById('statsContainer');
+        container.innerHTML = '';
+        const categories = [...new Set(questions.map(q => q.category || "כללי"))];
+        
+        categories.forEach(cat => {
+            let html = `<div class="category-group">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h4 style="margin:0; color:#1e40af;">נושא: ${cat}</h4>
+                </div>`;
+            
+            questions.filter(q => (q.category || "כללי") === cat).forEach(q => {
+                const qVotes = allVotes.filter(v => v.questionId === q.id);
+                html += `<div style="background:white; padding:10px; margin-top:10px; border-radius:5px;">
+                    <b>${q.text}</b> 
+                    <button onclick="editCategory('${q.id}', '${cat}')" style="font-size:10px; cursor:pointer;">✏️ ערוך נושא</button>
+                    <button onclick="deleteDoc(doc(db, 'question_bank', '${q.id}'))" style="float:left; color:red; border:none; background:none; cursor:pointer;">🗑️</button>
+                    <br><span class="date-tag">נוצר: ${formatDate(q.createdAt)}</span>`;
+                
+                q.options.forEach(opt => {
+                    const count = qVotes.filter(v => v.vote === opt).length;
+                    const pct = qVotes.length > 0 ? Math.round((count/qVotes.length)*100) : 0;
+                    html += `<div style="font-size:12px; margin-top:5px;">${opt} (${count})
+                        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+                    </div>`;
+                });
+                html += `</div>`;
+            });
+            html += `</div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    function renderVotes() {
+        const vBody = document.getElementById('vBody');
+        vBody.innerHTML = '';
+        allVotes.slice(0, 15).forEach(v => {
+            vBody.innerHTML += `<tr>
+                <td><span class="date-tag">${formatDate(v.createdAt)}</span></td>
+                <td>${v.name}</td>
+                <td>${v.vote}</td>
+                <td>
+                    <input type="text" id="res_${v.uid}" placeholder="סיבה" style="width:80px">
+                    <input type="date" id="date_${v.uid}">
+                    <button class="btn btn-red" onclick="applyBan('${v.uid}','${v.name}')">באן</button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    // פונקציות פעולה
+    window.applyBan = async (uid, name) => {
+        const reason = document.getElementById(`res_${uid}`).value || "הפרת כללים";
+        const until = document.getElementById(`date_${uid}`).value || "לצמיתות";
+        await setDoc(doc(db, "bans", uid), { name, reason, until, createdAt: serverTimestamp() });
+        alert("המשתמש נחסם!");
+    };
+
+    window.removeBan = async (uid) => { if(confirm("לשחרר את המשתמש?")) await deleteDoc(doc(db, "bans", uid)); };
+
+    window.editCategory = async (id, oldCat) => {
+        const newCat = prompt("שנה נושא ל:", oldCat);
+        if(newCat) await updateDoc(doc(db, "question_bank", id), { category: newCat });
+    };
+
+    document.getElementById('addBtn').onclick = async () => {
+        const text = document.getElementById('nq').value;
+        const category = document.getElementById('nCategory').value || "כללי";
+        const opts = document.getElementById('no').value.split(',').map(s => s.trim());
+        if(!text || opts.length < 1) return;
+        await setDoc(doc(db, "question_bank", "q_" + Date.now()), {
+            text, category, options: opts, createdAt: serverTimestamp(), isActive: true
+        });
+        document.getElementById('nq').value = "";
+    };
+
+    window.deleteDoc = async (d) => { if(confirm("למחוק?")) await deleteDoc(d); };
+
+</script>
+</body>
+</html>
