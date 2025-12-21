@@ -8,17 +8,23 @@
         .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; }
         .search-container { background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 2px solid #6366f1; display: flex; gap: 10px; align-items: center; }
         .search-input { flex: 1; border: none; outline: none; font-size: 16px; background: transparent; }
+        
         .category-group { border: 2px solid #3b82f6; padding: 15px; margin-bottom: 20px; background: #f8fafc; border-radius: 12px; min-height: 100px; }
         .category-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .category-title { background: #3b82f6; color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; }
+        
         .question-item { background: white; padding: 12px; margin-top: 8px; border-radius: 8px; border: 1px solid #eee; cursor: grab; }
+        
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 10px; border-bottom: 1px solid #edf2f7; text-align: right; font-size: 13px; }
-        .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; font-size: 12px; }
+        
+        .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; font-size: 12px; margin-left: 2px; }
         .btn-red { background: #ef4444; }
         .btn-blue { background: #3b82f6; }
         .btn-green { background: #10b981; }
         .btn-gray { background: #64748b; }
+        .btn-purple { background: #8b5cf6; }
+
         .bar-bg { background: #e2e8f0; height: 8px; border-radius: 5px; margin-top: 5px; overflow: hidden; }
         .bar-fill { background: #3b82f6; height: 100%; border-radius: 5px; }
         .voters-list { font-size: 10px; color: #475569; background: #f1f5f9; padding: 4px; border-radius: 4px; margin-top: 2px; display: none; }
@@ -134,7 +140,7 @@
     }
 
     function renderAll() {
-        // משתמשים וחסומים
+        // רנדור משתמשים וחסומים
         const uBody = document.getElementById('uBody'); uBody.innerHTML = '';
         Object.keys(localData.users).forEach(uid => {
             if(localData.users[uid].toLowerCase().includes(searchTerm))
@@ -144,14 +150,14 @@
         const bBody = document.getElementById('bBody'); bBody.innerHTML = '';
         localData.bans.forEach(b => { if(b.name.toLowerCase().includes(searchTerm)) bBody.innerHTML += `<tr><td>${b.name}</td><td>${b.reason}</td><td><button class="btn btn-green" onclick="removeBan('${b.id}')">בטל באן</button></td></tr>`; });
 
-        // רעיונות עם אפשרות מחיקה
+        // רעיונות
         const sBody = document.getElementById('sBody'); sBody.innerHTML = '';
         localData.suggestions.forEach(s => {
             if(s.text.toLowerCase().includes(searchTerm))
                 sBody.innerHTML += `<tr><td>${s.userName}</td><td>${s.text}</td><td><button class="btn btn-red" onclick="deleteSuggestion('${s.id}')">מחק</button></td></tr>`;
         });
 
-        // קטגוריות
+        // קטגוריות וסקרים
         const container = document.getElementById('statsContainer'); container.innerHTML = '';
         const cats = {};
         localData.questions.forEach(q => {
@@ -175,6 +181,7 @@
                         <b>${q.text}</b>
                         <span>
                             <button class="btn btn-gray" style="font-size:10px" onclick="toggleVoters('${q.id}')">👤 שמות</button>
+                            <button class="btn btn-purple" style="font-size:10px" onclick="changeQuestionCategory('${q.id}','${catName}')">📝 שנה נושא</button>
                             <button class="btn btn-red" style="font-size:10px" onclick="deleteQuestion('${q.id}')">🗑️</button>
                         </span>
                     </div>`;
@@ -193,7 +200,14 @@
     }
 
     // פונקציות גלובליות
-    window.deleteSuggestion = async (id) => { if(confirm("למחוק הצעה זו?")) await deleteDoc(doc(db, "suggestions", id)); };
+    window.changeQuestionCategory = async (qid, currentCat) => {
+        const newCat = prompt("לאיזה נושא להעביר את השאלה?", currentCat);
+        if (newCat && newCat !== currentCat) {
+            await updateDoc(doc(db, "question_bank", qid), { category: newCat });
+        }
+    };
+
+    window.deleteSuggestion = async (id) => { if(confirm("למחוק?")) await deleteDoc(doc(db, "suggestions", id)); };
     window.deleteWholeCategory = async (catName) => {
         if(confirm(`למחוק את כל השאלות בנושא "${catName}"?`)) {
             const toDelete = localData.questions.filter(q => q.category === catName);
