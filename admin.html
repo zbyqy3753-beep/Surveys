@@ -2,23 +2,34 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>ניהול מערכת | לוח בקרה מלא</title>
+    <title>ניהול מערכת מלא | לוח בקרה</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; direction: rtl; }
         .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; }
-        .category-group { border-right: 4px solid #3b82f6; padding: 10px; margin-bottom: 20px; background: #f8fafc; border-radius: 0 8px 8px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
-        th, td { padding: 12px; border-bottom: 1px solid #edf2f7; text-align: right; }
-        .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; margin: 2px; }
+        
+        .category-group { border: 2px solid #3b82f6; padding: 15px; margin-bottom: 20px; background: #f8fafc; border-radius: 12px; min-height: 80px; }
+        .category-group.drag-over { background: #e0e7ff; border-style: dashed; }
+        .category-title { background: #3b82f6; color: white; padding: 5px 15px; border-radius: 20px; display: inline-block; margin-bottom: 10px; font-weight: bold; }
+        
+        .question-item { background: white; padding: 12px; margin-top: 8px; border-radius: 8px; border: 1px solid #eee; cursor: grab; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border-bottom: 1px solid #edf2f7; text-align: right; font-size: 13px; }
+        
+        .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; font-size: 12px; transition: 0.2s; }
         .btn-red { background: #ef4444; }
         .btn-blue { background: #3b82f6; }
         .btn-green { background: #10b981; }
         .btn-purple { background: #8b5cf6; }
-        .bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; margin-top: 5px; width: 100%; }
+        .btn-small { padding: 2px 6px; font-size: 10px; background: #64748b; margin-right: 5px; }
+
+        .bar-bg { background: #e2e8f0; height: 8px; border-radius: 5px; margin-top: 5px; }
         .bar-fill { background: #3b82f6; height: 100%; border-radius: 5px; }
-        input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 5px; margin: 5px; }
-        .date-tag { font-size: 11px; color: #64748b; }
-        .perm-box { background: #f8fafc; padding: 10px; border-radius: 8px; display: flex; gap: 15px; margin: 10px 0; }
+        
+        .voters-list { font-size: 10px; color: #475569; background: #f1f5f9; padding: 4px; border-radius: 4px; margin-top: 2px; display: none; }
+        
+        input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 5px; margin: 2px; }
+        .perm-box { background: #f1f5f9; padding: 10px; border-radius: 8px; display: flex; gap: 10px; margin: 10px 0; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -29,29 +40,33 @@
     </div>
 
     <div class="card" id="ownerOnlyCard">
-        <h3>👑 ניהול צוות והגדרות מערכת</h3>
-        <input type="text" id="adminUid" placeholder="UID של המשתמש" style="width: 250px;">
+        <h3>👑 ניהול צוות והגדרות אב</h3>
+        <input type="text" id="adminUid" placeholder="UID של המשתמש" style="width: 280px;">
         <div class="perm-box">
             <label><input type="checkbox" class="role-check" value="QUESTIONS"> שאלות</label>
             <label><input type="checkbox" class="role-check" value="BANS"> באנים</label>
             <label><input type="checkbox" class="role-check" value="STATS"> סטטיסטיקה</label>
             <label><input type="checkbox" class="role-check" value="ADMINS"> ניהול אדמינים</label>
         </div>
-        <button class="btn btn-green" id="setAdminBtn">עדכן הרשאות</button>
-        <hr style="opacity: 0.2; margin: 20px 0;">
-        <button class="btn btn-red" id="clearAllDataBtn">⚠️ מחק את כל הנתונים (איפוס מערכת)</button>
+        <button class="btn btn-green" id="setAdminBtn">עדכן הרשאות אדמין</button>
+        <button class="btn btn-red" id="clearAllDataBtn" style="margin-right: 20px;">⚠️ איפוס כללי</button>
     </div>
 
-    <div class="card" id="suggestionsCard" style="border: 2px solid #8b5cf6;">
-        <h3 style="color:#8b5cf6;">💡 רעיונות לסקרים מהגולשים</h3>
+    <div class="card" id="usersCard">
+        <h3>👥 משתמשים (UID)</h3>
         <table>
-            <thead><tr><th>שם</th><th>הרעיון</th><th>תאריך</th><th>פעולה</th></tr></thead>
-            <tbody id="sBody"></tbody>
+            <thead><tr><th>שם</th><th>UID</th><th>פעולה</th></tr></thead>
+            <tbody id="uBody"></tbody>
         </table>
     </div>
 
+    <div class="card" id="suggestionsCard">
+        <h3 style="color:#8b5cf6;">💡 רעיונות מהגולשים</h3>
+        <table><tbody id="sBody"></tbody></table>
+    </div>
+
     <div class="card" id="statsCard">
-        <h3>📊 סטטיסטיקה ועריכת נושאים</h3>
+        <h3>📊 סקרים ופירוט הצבעות</h3>
         <div id="statsContainer">טוען...</div>
     </div>
 
@@ -59,24 +74,13 @@
         <h3>➕ הוספת שאלה חדשה</h3>
         <input type="text" id="nCategory" placeholder="נושא">
         <input type="text" id="nq" placeholder="שאלה">
-        <input type="text" id="no" placeholder="תשובות (עם פסיק)">
-        <button class="btn btn-blue" id="addBtn">צור שאלה</button>
-    </div>
-
-    <div class="card" id="voteActionCard">
-        <h3>🗳️ הצבעות וביצוע באן</h3>
-        <table>
-            <thead><tr><th>תאריך</th><th>שם</th><th>תשובה</th><th>פעולות</th></tr></thead>
-            <tbody id="vBody"></tbody>
-        </table>
+        <input type="text" id="no" placeholder="תשובות (מופרדות בפסיק)">
+        <button class="btn btn-blue" id="addBtn">פרסם סקר</button>
     </div>
 
     <div class="card" id="banListCard">
-        <h3>🚫 ניהול חסומים (Bans)</h3>
-        <table>
-            <thead><tr><th>שם</th><th>סיבה</th><th>פעולה</th></tr></thead>
-            <tbody id="bBody"></tbody>
-        </table>
+        <h3>🚫 ניהול חסומים</h3>
+        <table><tbody id="bBody"></tbody></table>
     </div>
 
 <script type="module">
@@ -97,34 +101,47 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // --- פונקציות גלובליות לכפתורים ---
-    window.applyBan = async (uid, name) => {
-        const reason = document.getElementById(`res_${uid}`).value || "הפרת כללים";
-        await setDoc(doc(db, "bans", uid), { name, reason, until: "לצמיתות", createdAt: serverTimestamp() });
-        alert("נחסם!");
+    // --- פונקציות תצוגה חדשות ---
+    window.toggleVoters = (qid) => {
+        const elements = document.querySelectorAll(`.voters-${qid}`);
+        elements.forEach(el => el.style.display = el.style.display === 'block' ? 'none' : 'block');
     };
 
-    window.removeBan = async (id) => await deleteDoc(doc(db, "bans", id));
+    window.editCategory = async (qid, current) => {
+        const n = prompt("נושא חדש:", current);
+        if(n) await updateDoc(doc(db, "question_bank", qid), { category: n });
+    };
 
+    window.deleteQuestion = async (id) => { if(confirm("למחוק?")) await deleteDoc(doc(db, "question_bank", id)); };
+    
     window.deleteUserData = async (uid) => {
-        if(!confirm("מחק את כל ההצבעות של משתמש זה?")) return;
+        if(!confirm("למחוק את כל נתוני המשתמש?")) return;
         const q = query(collection(db, "votes"), where("uid", "==", uid));
         const snap = await getDocs(q);
         const batch = writeBatch(db);
         snap.forEach(d => batch.delete(d.ref));
         await batch.commit();
-        alert("נתוני המשתמש נמחקו");
+        alert("נמחק");
     };
 
-    window.deleteQuestion = async (id) => {
-        if(confirm("למחוק שאלה זו?")) await deleteDoc(doc(db, "question_bank", id));
+    window.applyBan = async (uid, name) => {
+        const r = prompt("סיבת חסימה עבור " + name);
+        if(r) await setDoc(doc(db, "bans", uid), { name, reason: r, createdAt: serverTimestamp() });
     };
 
-    window.deleteSuggestion = async (id) => {
-        if(confirm("למחוק רעיון זה?")) await deleteDoc(doc(db, "suggestions", id));
+    window.removeBan = async (id) => await deleteDoc(doc(db, "bans", id));
+
+    // גרירה
+    window.onDragStart = (e, qid) => e.dataTransfer.setData("qid", qid);
+    window.allowDrop = (e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); };
+    window.onDragLeave = (e) => e.currentTarget.classList.remove('drag-over');
+    window.onDrop = async (e, nCat) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        const qid = e.dataTransfer.getData("qid");
+        if(qid) await updateDoc(doc(db, "question_bank", qid), { category: nCat });
     };
 
-    // --- ניהול הרשאות וכניסה ---
     onAuthStateChanged(auth, async user => {
         if (!user) { window.location.href = 'index.html'; return; }
         const adminDoc = await getDoc(doc(db, "admins", user.uid));
@@ -132,103 +149,118 @@
             const data = adminDoc.data();
             const perms = data.role === 'owner' ? ['QUESTIONS', 'BANS', 'STATS', 'ADMINS'] : (data.permissions || []);
             document.getElementById('roleLabel').innerText = data.role === 'owner' ? "Owner" : "אדמין";
-
-            if (perms.includes('STATS')) document.getElementById('statsCard').style.display = 'block';
+            
+            if (perms.includes('STATS')) { document.getElementById('statsCard').style.display = 'block'; document.getElementById('usersCard').style.display = 'block'; }
             if (perms.includes('QUESTIONS')) document.getElementById('addQuestionCard').style.display = 'block';
-            if (perms.includes('BANS')) {
-                document.getElementById('banListCard').style.display = 'block';
-                document.getElementById('voteActionCard').style.display = 'block';
-            }
-            if (perms.includes('ADMINS')) {
-                document.getElementById('ownerOnlyCard').style.display = 'block';
-                document.getElementById('suggestionsCard').style.display = 'block';
-            }
-            startApp(perms);
+            if (perms.includes('BANS')) document.getElementById('banListCard').style.display = 'block';
+            if (perms.includes('ADMINS')) { document.getElementById('ownerOnlyCard').style.display = 'block'; document.getElementById('suggestionsCard').style.display = 'block'; }
+            startApp();
         }
     });
 
-    function startApp(myPerms) {
-        const formatDate = (ts) => ts ? (ts.toDate ? ts.toDate().toLocaleString('he-IL') : new Date(ts).toLocaleString('he-IL')) : "---";
-
-        // טעינת רעיונות
-        onSnapshot(collection(db, "suggestions"), snap => {
-            const sBody = document.getElementById('sBody');
-            sBody.innerHTML = '';
-            snap.forEach(d => {
-                const s = d.data();
-                sBody.innerHTML += `<tr><td>${s.userName || 'אנונימי'}</td><td>${s.text}</td><td>${formatDate(s.createdAt)}</td><td><button class="btn btn-red" onclick="deleteSuggestion('${d.id}')">מחק</button></td></tr>`;
+    function startApp() {
+        // רשימת משתמשים
+        onSnapshot(collection(db, "votes"), snap => {
+            const uBody = document.getElementById('uBody');
+            const users = {};
+            snap.forEach(d => { users[d.data().uid] = d.data().name; });
+            uBody.innerHTML = '';
+            Object.keys(users).forEach(uid => {
+                uBody.innerHTML += `<tr><td><b>${users[uid]}</b></td><td><small>${uid}</small></td><td>
+                    <button class="btn btn-red" onclick="applyBan('${uid}','${users[uid]}')">באן</button>
+                    <button class="btn btn-blue" onclick="deleteUserData('${uid}')">מחק</button></td></tr>`;
             });
         });
 
-        // טעינת שאלות וסטטיסטיקה
+        // סטטיסטיקה עם פירוט שמות
         onSnapshot(collection(db, "question_bank"), snap => {
             const container = document.getElementById('statsContainer');
             container.innerHTML = '';
             const questions = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
             onSnapshot(collection(db, "votes"), vSnap => {
                 const allVotes = vSnap.docs.map(d => d.data());
-                const categories = [...new Set(questions.map(q => q.category || "כללי"))];
-                categories.forEach(cat => {
-                    let html = `<div class="category-group"><h4>נושא: ${cat}</h4>`;
-                    questions.filter(q => (q.category || "כללי") === cat).forEach(q => {
+                const categories = {};
+                questions.forEach(q => {
+                    const cat = q.category || "כללי";
+                    if(!categories[cat]) categories[cat] = [];
+                    categories[cat].push(q);
+                });
+
+                Object.keys(categories).forEach(catName => {
+                    let html = `<div class="category-group" ondragover="allowDrop(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, '${catName}')">
+                        <span class="category-title">${catName}</span>`;
+                    
+                    categories[catName].forEach(q => {
                         const qVotes = allVotes.filter(v => v.questionId === q.id);
-                        html += `<div style="background:white; padding:10px; margin-top:10px; border-radius:5px; position:relative;">
-                            <b>${q.text}</b> <button class="btn btn-red" style="font-size:10px; float:left" onclick="deleteQuestion('${q.id}')">🗑️</button><br>`;
+                        html += `<div class="question-item" draggable="true" ondragstart="onDragStart(event, '${q.id}')">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span><b>${q.text}</b></span>
+                                <span>
+                                    <button class="btn btn-small" onclick="toggleVoters('${q.id}')">👤 הצגת שמות</button>
+                                    <button class="btn btn-blue" style="font-size:9px" onclick="editCategory('${q.id}','${catName}')">נושא</button>
+                                    <button class="btn btn-red" style="font-size:9px" onclick="deleteQuestion('${q.id}')">🗑️</button>
+                                </span>
+                            </div>`;
+                        
                         (q.options || []).forEach(opt => {
-                            const count = qVotes.filter(v => v.vote === opt).length;
+                            const votersForOpt = qVotes.filter(v => v.vote === opt);
+                            const count = votersForOpt.length;
+                            const names = votersForOpt.map(v => v.name).join(', ') || "אין הצבעות";
                             const pct = qVotes.length > 0 ? Math.round((count/qVotes.length)*100) : 0;
-                            html += `<div style="font-size:11px; margin-top:4px;">${opt} (${count})<div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+                            
+                            html += `
+                                <div style="margin-top:8px;">
+                                    <div style="font-size:11px;">${opt} (${count})</div>
+                                    <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+                                    <div class="voters-list voters-${q.id}">${names}</div>
+                                </div>`;
                         });
                         html += `</div>`;
                     });
                     container.innerHTML += html + `</div>`;
                 });
-
-                // טבלת הצבעות
-                const vBody = document.getElementById('vBody');
-                vBody.innerHTML = '';
-                allVotes.slice(0, 20).forEach(v => {
-                    vBody.innerHTML += `<tr><td><span class="date-tag">${formatDate(v.createdAt)}</span></td><td>${v.name}</td><td>${v.vote}</td>
-                        <td><input type="text" id="res_${v.uid}" placeholder="סיבה" style="width:60px">
-                        <button class="btn btn-red" onclick="applyBan('${v.uid}','${v.name}')">באן</button>
-                        <button class="btn btn-blue" style="font-size:10px" onclick="deleteUserData('${v.uid}')">מחק נתונים</button></td></tr>`;
-                });
             });
         });
 
-        // רשימת חסומים
-        onSnapshot(collection(db, "bans"), snap => {
-            const bBody = document.getElementById('bBody');
-            bBody.innerHTML = '';
+        // רעיונות
+        onSnapshot(collection(db, "suggestions"), snap => {
+            const sBody = document.getElementById('sBody'); sBody.innerHTML = '';
             snap.forEach(d => {
-                const b = d.data();
-                bBody.innerHTML += `<tr><td>${b.name}</td><td>${b.reason}</td><td><button class="btn btn-green" onclick="removeBan('${d.id}')">שחרר</button></td></tr>`;
+                sBody.innerHTML += `<tr><td>${d.data().userName}</td><td>${d.data().text}</td><td><button class="btn btn-red" onclick="deleteDoc(doc(db,'suggestions','${d.id}'))">מחק</button></td></tr>`;
             });
         });
 
-        // כפתורי פעולה
-        document.getElementById('clearAllDataBtn').onclick = async () => {
-            if(!confirm("אזהרה: מחיקת כל ההצבעות והשאלות מהמערכת!")) return;
-            for (let col of ['votes', 'question_bank', 'suggestions']) {
-                const snap = await getDocs(collection(db, col));
-                const batch = writeBatch(db);
-                snap.forEach(d => batch.delete(d.ref));
-                await batch.commit();
-            }
-            alert("המערכת אופסה");
-        };
-
-        document.getElementById('setAdminBtn').onclick = async () => {
-            const uid = document.getElementById('adminUid').value.trim();
-            const selected = Array.from(document.querySelectorAll('.role-check:checked')).map(c => c.value);
-            if(uid) await setDoc(doc(db, "admins", uid), { permissions: selected, role: 'custom' }, { merge: true });
-            alert("עודכן");
-        };
+        // חסומים
+        onSnapshot(collection(db, "bans"), snap => {
+            const bBody = document.getElementById('bBody'); bBody.innerHTML = '';
+            snap.forEach(d => {
+                bBody.innerHTML += `<tr><td>${d.data().name}</td><td>${d.data().reason}</td><td><button class="btn btn-green" onclick="removeBan('${d.id}')">שחרר</button></td></tr>`;
+            });
+        });
 
         document.getElementById('addBtn').onclick = async () => {
             const text = document.getElementById('nq').value, cat = document.getElementById('nCategory').value || "כללי", opts = document.getElementById('no').value.split(',').map(s => s.trim());
             if(text) await addDoc(collection(db, "question_bank"), { text, category: cat, options: opts, createdAt: serverTimestamp() });
-            alert("נוסף");
+        };
+
+        document.getElementById('setAdminBtn').onclick = async () => {
+            const uid = document.getElementById('adminUid').value.trim();
+            const perms = Array.from(document.querySelectorAll('.role-check:checked')).map(c => c.value);
+            if(uid) await setDoc(doc(db, "admins", uid), { permissions: perms, role: 'custom' }, { merge: true });
+            alert("עודכן!");
+        };
+
+        document.getElementById('clearAllDataBtn').onclick = async () => {
+            if(confirm("למחוק הכל? (שאלות, הצבעות, רעיונות)")) {
+                for (let c of ['votes', 'question_bank', 'suggestions']) {
+                    const s = await getDocs(collection(db, c));
+                    const b = writeBatch(db);
+                    s.forEach(d => b.delete(d.ref));
+                    await b.commit();
+                }
+                alert("המערכת אופסה");
+            }
         };
     }
 </script>
